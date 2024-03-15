@@ -208,3 +208,66 @@ valutazione,
 SELECT nome_albergo, AVG(valutazione)
 	FROM alberghiRecensioniPrenotazioni
 	GROUP BY nome_albergo;
+DROP PROCEDURE IF EXISTS CheckDatePrenotation
+CREATE PROCEDURE CheckDatePrenotation
+    @check_in_value DATE,
+    @check_out_value DATE,
+    @cameraRIF INT,
+    @clienteRIF INTAS VARCHAR
+AS
+BEGIN
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        
+        IF @check_out_value < @check_in_value
+            THROW 50001, 'La data di check-in non può essere successiva alla data di check-out', 1;
+
+        
+         SELECT *
+		 FROM Prenotazione
+		 WHERE cameraRIF = @cameraRIF
+         AND ((@check_in_value BETWEEN data_check_in AND data_check_out)
+			OR (@check_out_value BETWEEN data_check_in AND data_check_out)
+			OR (data_check_in BETWEEN @check_in_value AND @check_out_value)
+			OR (data_check_out BETWEEN @check_in_value AND @check_out_value));
+
+        IF @@ROWCOUNT > 0
+            THROW 50002, 'La camera risulta già occupata durante il periodo selezionato', 1;
+    
+
+
+		INSERT INTO Prenotazione (data_check_in, data_check_out, cameraRIF, clienteRIF)
+        VALUES (@check_in_value, @check_out_value, @cameraRIF, @clienteRIF);
+
+        COMMIT TRANSACTION;
+
+        PRINT 'Prenotazione effettuata con successo.';
+    END TRY
+    BEGIN CATCH
+      
+        ROLLBACK TRANSACTION;
+        
+        PRINT 'Ho riscontrato l''errore: ' + ERROR_MESSAGE();
+    END CATCH
+END;
+
+
+
+EXEC CheckDatePrenotation @check_in_value = '2024-03-16' ,@check_out_value='2024-03-17', @cameraRIF=1,@clienteRIF=1
+SELECT * FROM Prenotazione
+
+SELECT *
+	FROM Albergo
+	JOIN Camera ON Albergo.albergoID = Camera.albergoRIF
+	JOIN Prenotazione ON camera.cameraID = Prenotazione.cameraRIF
+
+	DECLARE @dataIngresso DATE ='2024-03-16'
+	DECLARE @dataUscita DATE ='2024-03-19'
+
+
+SELECT  COUNT(*) 
+	FROM Prenotazione 
+	WHERE data_check_in <= @dataIngresso AND data_check_in >= @dataUscita
+
+--Sull'esercizio degli alberghi, permettere la prenotazione solo tramite SP ed evitare che la prenotazione ne sovrasti una già attiva su una stanza.
